@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Quincena</title>
+<meta name="description" content="Presupuesto y gastos por quincena">
+<meta name="theme-color" content="#0E8F7E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Quincena">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+:root{
+  --bg:#EDF1EF;--card:#FFFFFF;--ink:#15302A;--mut:#5B726C;--line:#D5DEDA;
+  --spent:#3B4BA8;--pend:#E3A72F;--free:#0E8F7E;--bad:#C5432F;--on-accent:#FFFFFF;
+  --radius:12px;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0F1816;--card:#17231F;--ink:#E6EFEC;--mut:#93ABA5;--line:#2A3B36;
+    --spent:#7B8BEA;--pend:#E9B84F;--free:#2CC4AE;--bad:#F07562;--on-accent:#0B1512}
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums;min-height:100dvh}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--free);outline-offset:2px}
+.wrap{max-width:560px;margin:0 auto;padding:0 16px}
+.hidden{display:none!important}
+h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
+h2{font-size:15px;color:var(--mut);font-weight:600;margin:28px 0 8px}
+.mut{color:var(--mut)}
+.num{font-variant-numeric:tabular-nums}
+
+/* auth */
+#auth{padding:56px 0}
+#auth h1{font-size:34px;margin-bottom:6px}
+#auth p{margin:0 0 28px;color:var(--mut)}
+label.f{display:block;margin:0 0 14px;font-size:14px;color:var(--mut)}
+label.f input,label.f select{display:block;width:100%;margin-top:6px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--card);font-size:16px;color:var(--ink)}
+label.f.row{display:flex;align-items:center;gap:10px}
+label.f.row input{width:auto;margin:0}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:10px;padding:13px 18px;background:var(--free);color:var(--on-accent);font-weight:650;min-height:46px}
+.btn.block{width:100%}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.danger{background:transparent;color:var(--bad);border:1px solid var(--bad)}
+.btn.small{padding:8px 12px;min-height:36px;font-size:14px}
+.err{color:var(--bad);font-size:14px;min-height:20px;margin:8px 0}
+
+/* header */
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);padding:max(12px,env(safe-area-inset-top)) 0 10px;border-bottom:1px solid var(--line)}
+.period{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.period .mid{text-align:center;flex:1}
+.period .mid b{font-size:18px;display:block}
+.period .mid span{font-size:13px;color:var(--mut)}
+.arrow{width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--card);font-size:20px;line-height:1}
+.arrow:disabled{opacity:.35}
+main{padding-bottom:150px}
+
+/* hero bar */
+.hero{margin-top:20px}
+.bar{position:relative;display:flex;gap:2px;height:30px;border-radius:9px;overflow:visible}
+.bar .seg{display:block;flex-basis:0;min-width:0;height:100%}
+.bar .seg:first-of-type{border-radius:9px 0 0 9px}
+.bar .seg:last-of-type{border-radius:0 9px 9px 0}
+.bar .seg:only-of-type{border-radius:9px}
+.seg.spent{background:var(--spent)}
+.seg.pend{background:repeating-linear-gradient(135deg,var(--pend) 0 6px,transparent 6px 10px);outline:1.5px solid var(--pend);outline-offset:-1.5px}
+.seg.free{background:var(--free)}
+.bar.empty{background:var(--line)}
+.goal{position:absolute;top:-7px;bottom:-7px;width:3px;background:var(--ink);border-radius:2px}
+.goal::after{content:"meta";position:absolute;top:-17px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--mut);font-weight:600}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:14px 0 0;font-size:13px;color:var(--mut)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.facts{margin:22px 0 0;border-top:1px solid var(--line)}
+.facts div{display:flex;justify-content:space-between;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--line)}
+.facts dt{color:var(--mut)}
+.facts dd{margin:0;font-weight:650;font-size:18px}
+.facts .big dd{font-size:26px}
+.good{color:var(--free)}.warn{color:var(--pend)}.bad{color:var(--bad)}
+.note{margin:12px 0 0;font-size:14px;color:var(--mut)}
+.banner{margin-top:16px;padding:12px 14px;border:1px solid var(--pend);border-radius:var(--radius);display:flex;gap:12px;align-items:center;justify-content:space-between;font-size:14px}
+
+/* lists */
+.list{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.item{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:13px 14px;border:0;border-bottom:1px solid var(--line);background:transparent;text-align:left}
+.item:last-child{border-bottom:0}
+.item .l{min-width:0}
+.item .l b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .l span{font-size:13px;color:var(--mut)}
+.item .r{font-weight:650;white-space:nowrap}
+.item .r.in{color:var(--free)}
+.cat{padding:12px 14px;border-bottom:1px solid var(--line)}
+.cat:last-child{border-bottom:0}
+.cat .h{display:flex;justify-content:space-between;gap:12px}
+.cat .h b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cat .h>span{white-space:nowrap}
+.cat .t{height:6px;border-radius:3px;background:var(--line);margin-top:8px;overflow:hidden}
+.cat .t i{display:block;height:100%;background:var(--spent);border-radius:3px}
+.cat .t i.over{background:var(--bad)}
+.day{margin:22px 0 8px;font-size:14px;color:var(--mut);font-weight:600;display:flex;justify-content:space-between}
+.empty-state{padding:36px 8px;text-align:center;color:var(--mut)}
+.empty-state p{margin:0 0 16px}
+
+/* nav + fab */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+nav.tabs button{border:0;background:transparent;padding:14px 4px;font-size:14px;color:var(--mut);font-weight:600;min-height:52px}
+nav.tabs button[aria-current=page]{color:var(--ink);box-shadow:inset 0 3px 0 var(--free)}
+.fab{position:fixed;right:max(16px,calc(50% - 280px + 16px));bottom:calc(72px + env(safe-area-inset-bottom));z-index:7;border-radius:999px;padding:0 22px;min-height:52px;border:0;background:var(--free);color:var(--on-accent);font-weight:700;box-shadow:0 2px 0 rgba(0,0,0,.25)}
+
+/* sheet */
+dialog#sheet{border:0;padding:0;margin:auto auto 0;width:100%;max-width:560px;border-radius:18px 18px 0 0;background:var(--card);color:var(--ink);max-height:92dvh;overflow:auto}
+dialog#sheet::backdrop{background:rgba(5,15,12,.55)}
+.sh{padding:18px 18px calc(22px + env(safe-area-inset-bottom))}
+.sh .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.sh .hd h3{font-size:19px}
+.x{border:0;background:transparent;font-size:15px;color:var(--mut);padding:8px}
+.amount{font-size:34px!important;font-weight:700;padding:10px 14px!important}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 16px}
+.chip input{position:absolute;opacity:0;pointer-events:none}
+.chip span{display:inline-block;padding:9px 13px;border:1px solid var(--line);border-radius:999px;font-size:15px;background:var(--bg)}
+.chip input:checked+span{background:var(--free);color:var(--on-accent);border-color:var(--free);font-weight:650}
+.chip input:focus-visible+span{outline:3px solid var(--free);outline-offset:2px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.actions{display:flex;gap:10px;margin-top:6px}
+.actions .btn{flex:1}
+.lbl{font-size:14px;color:var(--mut)}
+#toast{position:fixed;left:50%;bottom:calc(132px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:20;max-width:90vw}
+@media (prefers-reduced-motion:no-preference){
+  .bar .seg{transition:flex-grow .35s ease}
+}
+</style>
+</head>
+<body>
+
+<section id="auth" class="wrap hidden">
+  <h1>Quincena</h1>
+  <p>Entra con la misma cuenta de Pinto &amp; Pesas.</p>
+  <form id="loginForm" autocomplete="on">
+    <label class="f">Correo<input id="email" type="email" autocomplete="username" required></label>
+    <label class="f">Contraseña<input id="pass" type="password" autocomplete="current-password" required></label>
+    <label class="f row"><input id="remember" type="checkbox" checked>Recordar mi correo</label>
+    <div id="authErr" class="err" role="alert"></div>
+    <button class="btn block" type="submit">Entrar</button>
+  </form>
+</section>
+
+<div id="app" class="hidden">
+  <header class="top"><div class="wrap">
+    <div class="period">
+      <button class="arrow" id="prev" aria-label="Quincena anterior">&#8249;</button>
+      <div class="mid"><b id="pLabel">—</b><span id="pSub"></span></div>
+      <button class="arrow" id="next" aria-label="Quincena siguiente">&#8250;</button>
+    </div>
+  </div></header>
+  <main class="wrap" id="view" aria-live="polite"></main>
+  <button class="fab" id="fab" data-act="add-exp">+ Gasto</button>
+  <nav class="tabs" aria-label="Secciones"><div>
+    <button data-tab="resumen">Resumen</button>
+    <button data-tab="mov">Movimientos</button>
+    <button data-tab="cats">Categorías</button>
+    <button data-tab="ajustes">Ajustes</button>
+  </div></nav>
+</div>
+
+<dialog id="sheet" aria-labelledby="sheetTitle"><div class="sh">
+  <div class="hd"><h3 id="sheetTitle"></h3><button class="x" id="sheetClose" type="button">Cerrar</button></div>
+  <div id="sheetBody"></div>
+</div></dialog>
+<div id="toast" class="hidden" role="status"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+const SB_URL='https://jcsiaqyihunsacembumy.supabase.co';
+const SB_KEY='sb_publishable_taVcn0nEVO0VPU5u5KB4ig_UU3AHXEw';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+
+const $=(s,r=document)=>r.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const r2=x=>Math.round((x+Number.EPSILON)*100)/100;
+const MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const parse=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const dshort=s=>{const d=parse(s);return d.getDate()+' '+MES[d.getMonth()]};
+const addDays=(s,n)=>{const d=parse(s);d.setDate(d.getDate()+n);return ymd(d)};
+const today=()=>ymd(new Date());
+function fmt(n){const neg=n<0,a=Math.abs(n);const c=Math.abs(a-Math.round(a))>0.004;
+  return (neg?'-':'')+'₡'+a.toLocaleString('en-US',{minimumFractionDigits:c?2:0,maximumFractionDigits:2})}
+function num(v){const n=parseFloat(String(v).replace(/[,\s₡]/g,''));return isFinite(n)?n:NaN}
+const SCHED={split:'Mitad en cada quincena',q1:'Completo en la 1.ª quincena',q2:'Completo en la 2.ª quincena'};
+const KIND={fixed:'Fijo (se paga una vez)',variable:'Variable',unexpected:'Imprevistos'};
+
+const S={user:null,settings:null,cats:[],periods:[],period:null,income:[],expenses:[],tab:'resumen',lastCat:null};
+
+/* ---------- helpers ---------- */
+let toastT;
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.remove('hidden');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.add('hidden'),2600)}
+function fail(e){console.error(e);toast('No se pudo guardar: '+(e&&e.message?e.message:'error de red'))}
+const goalVal=()=>+(S.settings?.free_goal??250000);
+const catById=id=>S.cats.find(c=>c.id===id);
+function budgetFor(c,p){const m=+c.monthly_budget;if(c.schedule==='split')return m/2;if(c.schedule==='q1')return p.half===1?m:0;return p.half===2?m:0}
+function calc(){
+  const p=S.period;
+  const inc=r2(S.income.reduce((a,x)=>a+ +x.amount,0));
+  const by={};S.expenses.forEach(e=>by[e.category_id]=r2((by[e.category_id]||0)+ +e.amount));
+  const spent=r2(S.expenses.reduce((a,x)=>a+ +x.amount,0));
+  const rows=S.cats.filter(c=>c.active||by[c.id]).map(c=>{
+    const b=budgetFor(c,p),s=by[c.id]||0;
+    return {c,b:r2(b),s,pend:(c.kind==='fixed'&&c.active&&b-s>=1)?r2(b-s):0}});
+  const pending=r2(rows.reduce((a,r)=>a+r.pend,0));
+  return {inc,spent,rows,pending,free:r2(inc-spent),projected:r2(inc-spent-pending)}
+}
+function daysLeft(){const t=today(),p=S.period;if(!p||t<p.start_date||t>p.end_date)return null;return Math.round((parse(p.end_date)-parse(t))/86400000)}
+function defaultDay(){const t=today(),p=S.period;if(!p)return t;return t<p.start_date?p.start_date:(t>p.end_date?p.end_date:t)}
+
+/* ---------- sheet ---------- */
+const dlg=$('#sheet');
+function openSheet(title,html){$('#sheetTitle').textContent=title;$('#sheetBody').innerHTML=html;if(!dlg.open)dlg.showModal()}
+function closeSheet(){if(dlg.open)dlg.close()}
+dlg.addEventListener('click',e=>{if(e.target===dlg)closeSheet()});
+$('#sheetClose').addEventListener('click',closeSheet);
+
+/* ---------- auth ---------- */
+function showAuth(){$('#app').classList.add('hidden');$('#auth').classList.remove('hidden');
+  try{const m=localStorage.getItem('q_email');if(m)$('#email').value=m}catch(_){}}
+$('#loginForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();$('#authErr').textContent='';
+  const email=$('#email').value.trim(),password=$('#pass').value;
+  const {data,error}=await sb.auth.signInWithPassword({email,password});
+  if(error){$('#authErr').textContent='Correo o contraseña incorrectos.';return}
+  try{if($('#remember').checked)localStorage.setItem('q_email',email);else localStorage.removeItem('q_email')}catch(_){}
+  start(data.user)});
+sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT'){S.user=null;showAuth()}});
+
+/* ---------- data ---------- */
+async function loadBase(){
+  const [s,c,p]=await Promise.all([
+    sb.from('fin_settings').select('*').maybeSingle(),
+    sb.from('fin_categories').select('*').order('sort').order('name'),
+    sb.from('fin_periods').select('*').order('start_date',{ascending:false})]);
+  if(c.error)throw c.error;if(p.error)throw p.error;
+  S.settings=s.data;S.cats=c.data;S.periods=p.data}
+async function loadPeriod(){
+  if(!S.period){S.income=[];S.expenses=[];return}
+  const id=S.period.id;
+  const [i,e]=await Promise.all([
+    sb.from('fin_income').select('*').eq('period_id',id).order('day',{ascending:false}),
+    sb.from('fin_expenses').select('*').eq('period_id',id).order('day',{ascending:false}).order('created_at',{ascending:false})]);
+  if(i.error)throw i.error;if(e.error)throw e.error;
+  S.income=i.data;S.expenses=e.data}
+async function start(user){
+  S.user=user;$('#auth').classList.add('hidden');$('#app').classList.remove('hidden');
+  try{
+    await loadBase();
+    const t=today();
+    S.period=S.periods.find(p=>p.start_date<=t&&t<=p.end_date)||S.periods[0]||null;
+    await loadPeriod();render()
+  }catch(e){fail(e)}}
+async function refresh(){await loadPeriod();render()}
+
+/* ---------- render ---------- */
+function render(){
+  const p=S.period;
+  $('#pLabel').textContent=p?dshort(p.start_date)+' – '+dshort(p.end_date):'Sin quincena';
+  const dl=daysLeft();
+  $('#pSub').textContent=p?('Quincena '+p.half+(dl===null?'':(dl===0?' · termina hoy':' · quedan '+dl+' días'))):'';
+  const i=S.periods.findIndex(x=>p&&x.id===p.id);
+  $('#prev').disabled=!p||i>=S.periods.length-1;
+  $('#next').disabled=!p||i<=0;
+  document.querySelectorAll('nav.tabs button').forEach(b=>{if(b.dataset.tab===S.tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
+  $('#fab').classList.toggle('hidden',!p||S.tab==='ajustes'||S.tab==='cats');
+  const v=$('#view');
+  v.innerHTML=({resumen:rResumen,mov:rMov,cats:rCats,ajustes:rAjustes})[S.tab]();
+  window.scrollTo(0,0)}
+
+function rEmptyPeriod(){return `<div class="empty-state"><p>Todavía no tienes una quincena. Crea la primera para empezar a registrar gastos.</p><button class="btn" data-act="new-period">Crear quincena</button></div>`}
+
+function rResumen(){
+  if(!S.period)return rEmptyPeriod();
+  const k=calc(),goal=goalVal();
+  const total=Math.max(k.inc,k.spent+k.pending,1);
+  const freeSeg=Math.max(0,r2(k.inc-k.spent-k.pending));
+  const goalPos=Math.min(100,Math.max(0,(k.inc-goal)/total*100));
+  const tone=k.projected>=goal?'good':(k.projected>=0?'warn':'bad');
+  const isLatest=S.periods[0]&&S.periods[0].id===S.period.id;
+  const ended=isLatest&&today()>S.period.end_date;
+  const segs=(k.spent>0?`<i class="seg spent" style="flex-grow:${k.spent}"></i>`:'')+
+    (k.pending>0?`<i class="seg pend" style="flex-grow:${k.pending}"></i>`:'')+
+    (freeSeg>0?`<i class="seg free" style="flex-grow:${freeSeg}"></i>`:'');
+  const alabel=`Gastado ${fmt(k.spent)}, por pagar ${fmt(k.pending)}, libre ${fmt(freeSeg)} de ${fmt(k.inc)} de ingreso`;
+  const pend=k.rows.filter(r=>r.pend>0);
+  const budgeted=k.rows.filter(r=>r.b>0||r.s>0);
+  return `
+  ${ended?`<div class="banner"><span>Esta quincena terminó el ${dshort(S.period.end_date)}.</span><button class="btn small" data-act="new-period">Crear siguiente</button></div>`:''}
+  <section class="hero" aria-label="Reparto del ingreso">
+    <div class="bar ${k.inc||k.spent?'':'empty'}" role="img" aria-label="${esc(alabel)}">${segs}${k.inc>goal?`<b class="goal" style="left:${goalPos.toFixed(2)}%"></b>`:''}</div>
+    <div class="legend">
+      <span><i style="background:var(--spent)"></i>Gastado ${fmt(k.spent)}</span>
+      <span><i style="background:var(--pend)"></i>Por pagar ${fmt(k.pending)}</span>
+      <span><i style="background:var(--free)"></i>Libre ${fmt(freeSeg)}</span>
+    </div>
+  </section>
+  <dl class="facts">
+    <div><dt>Ingreso</dt><dd>${fmt(k.inc)}</dd></div>
+    <div><dt>Disponible hoy</dt><dd class="${k.free<0?'bad':''}">${fmt(k.free)}</dd></div>
+    <div class="big"><dt>Libre al pagar todo</dt><dd class="${tone}">${fmt(k.projected)}</dd></div>
+    <div><dt>Meta de libre</dt><dd>${fmt(goal)}</dd></div>
+  </dl>
+  <p class="note">${k.projected>=goal?'Vas por encima de tu meta.':`Te faltan ${fmt(r2(goal-k.projected))} para llegar a la meta.`}</p>
+  ${k.inc===0?`<p class="note">Aún no hay ingreso en esta quincena. <button class="btn small ghost" data-act="add-inc">Agregar ingreso</button></p>`:''}
+  ${pend.length?`<h2>Por pagar en esta quincena</h2><div class="list">${pend.map(r=>`
+    <button class="item" data-act="pay" data-cat="${r.c.id}" data-amt="${r.pend}">
+      <span class="l"><b>${esc(r.c.name)}</b><span>Toca para registrar el pago</span></span>
+      <span class="r">${fmt(r.pend)}</span></button>`).join('')}</div>`:''}
+  ${budgeted.length?`<h2>Presupuesto de la quincena</h2><div class="list">${budgeted.map(r=>{
+    const pct=r.b>0?Math.min(100,r.s/r.b*100):(r.s>0?100:0);const over=r.s>r.b;
+    return `<div class="cat"><div class="h"><b>${esc(r.c.name)}</b><span class="${over?'bad':''}">${fmt(r.s)}${r.b>0?` <span class="mut">/ ${fmt(r.b)}</span>`:' <span class="mut">sin presupuesto</span>'}</span></div>
+    <div class="t"><i class="${over?'over':''}" style="width:${pct.toFixed(1)}%"></i></div></div>`}).join('')}</div>`:''}`
+}
+
+function rMov(){
+  if(!S.period)return rEmptyPeriod();
+  const items=[...S.expenses.map(e=>({t:'e',...e})),...S.income.map(i=>({t:'i',...i}))]
+    .sort((a,b)=>a.day<b.day?1:a.day>b.day?-1:(a.created_at<b.created_at?1:-1));
+  if(!items.length)return `<div class="empty-state"><p>No hay movimientos en esta quincena. Registra el primer gasto con el botón de abajo.</p></div>`;
+  const groups={};items.forEach(x=>(groups[x.day]=groups[x.day]||[]).push(x));
+  return `<div style="margin-top:8px"><button class="btn ghost small" data-act="add-inc">+ Ingreso</button></div>`+
+    Object.keys(groups).sort().reverse().map(d=>{
+      const tot=r2(groups[d].reduce((a,x)=>a+(x.t==='e'?+x.amount:0),0));
+      return `<div class="day"><span>${dshort(d)}</span><span>${tot?fmt(tot):''}</span></div><div class="list">${groups[d].map(x=>x.t==='e'?
+        `<button class="item" data-act="edit-exp" data-id="${x.id}"><span class="l"><b>${esc(x.detail||catById(x.category_id)?.name||'Gasto')}</b><span>${esc(catById(x.category_id)?.name||'')}</span></span><span class="r">${fmt(+x.amount)}</span></button>`:
+        `<button class="item" data-act="edit-inc" data-id="${x.id}"><span class="l"><b>${esc(x.note||'Ingreso')}</b><span>Ingreso</span></span><span class="r in">+${fmt(+x.amount)}</span></button>`).join('')}</div>`}).join('')}
+
+function rCats(){
+  if(!S.cats.length)return `<div class="empty-state"><p>Aún no tienes categorías. Carga unas básicas y ajústalas a tu gusto.</p><button class="btn" data-act="seed">Cargar categorías básicas</button></div>`;
+  return `<div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center"><span class="mut">Presupuesto mensual</span><button class="btn small" data-act="edit-cat">+ Categoría</button></div>
+  <div class="list" style="margin-top:10px">${S.cats.map(c=>`
+    <button class="item" data-act="edit-cat" data-id="${c.id}" ${c.active?'':'style="opacity:.55"'}>
+      <span class="l"><b>${esc(c.name)}</b><span>${SCHED[c.schedule]} · ${KIND[c.kind].split(' (')[0]}${c.active?'':' · oculta'}</span></span>
+      <span class="r">${fmt(+c.monthly_budget)}</span></button>`).join('')}</div>`}
+
+function rAjustes(){
+  return `<h2>Meta de dinero libre por quincena</h2>
+  <form id="goalForm"><label class="f">Meta en colones<input id="goal" inputmode="decimal" value="${goalVal()}"></label>
+  <button class="btn" type="submit">Guardar meta</button></form>
+  <h2>Quincena</h2>
+  <div class="actions"><button class="btn ghost" data-act="edit-period" ${S.period?'':'disabled'}>Editar fechas</button><button class="btn ghost" data-act="new-period">Nueva quincena</button></div>
+  <h2>Cuenta</h2><p class="mut" style="margin:0 0 12px">${esc(S.user?.email||'')}</p>
+  <button class="btn danger" data-act="signout">Cerrar sesión</button>`}
+
+/* ---------- sheets: expense ---------- */
+function sheetExpense(e){
+  e=e||{};const edit=!!e.id;
+  const cats=S.cats.filter(c=>c.active||c.id===e.category_id);
+  if(!cats.length){toast('Primero crea una categoría');S.tab='cats';render();return}
+  const sel=e.category_id||S.lastCat||cats[0].id;
+  const details=[...new Set(S.expenses.map(x=>x.detail).filter(Boolean))].slice(0,40);
+  openSheet(edit?'Editar gasto':'Nuevo gasto',`
+  <form id="expForm" data-id="${e.id||''}">
+    <label class="f">Monto<input class="amount" id="eAmt" inputmode="decimal" autocomplete="off" placeholder="0" value="${e.amount??''}" required></label>
+    <div class="lbl">Categoría</div>
+    <div class="chips" role="radiogroup" aria-label="Categoría">${cats.map(c=>`<label class="chip"><input type="radio" name="cat" value="${c.id}" ${c.id===sel?'checked':''}><span>${esc(c.name)}</span></label>`).join('')}</div>
+    <label class="f">Detalle (opcional)<input id="eDet" list="dl" maxlength="100" autocomplete="off" value="${esc(e.detail||'')}"></label>
+    <datalist id="dl">${details.map(d=>`<option value="${esc(d)}">`).join('')}</datalist>
+    <label class="f">Fecha<input id="eDay" type="date" value="${e.day||defaultDay()}" required></label>
+    <div id="eErr" class="err" role="alert"></div>
+    <div class="actions">${edit?`<button class="btn danger" type="button" id="eDel">Borrar</button>`:''}<button class="btn" type="submit">${edit?'Guardar cambios':'Guardar gasto'}</button></div>
+  </form>`);
+  if(!edit)setTimeout(()=>$('#eAmt')?.focus(),60);
+  if(edit){let armed=false;$('#eDel').onclick=async ev=>{
+    if(!armed){armed=true;ev.target.textContent='Toca para confirmar';return}
+    const {error}=await sb.from('fin_expenses').delete().eq('id',e.id);
+    if(error)return fail(error);closeSheet();toast('Gasto borrado');refresh()}}
+  $('#expForm').onsubmit=async ev=>{
+    ev.preventDefault();
+    const amount=num($('#eAmt').value),cat=(document.querySelector('input[name=cat]:checked')||{}).value,day=$('#eDay').value;
+    if(!(amount>0)){$('#eErr').textContent='Escribe un monto mayor a cero.';return}
+    if(!cat){$('#eErr').textContent='Elige una categoría.';return}
+    const row={category_id:cat,day,detail:$('#eDet').value.trim(),amount:r2(amount)};
+    const q=edit?sb.from('fin_expenses').update(row).eq('id',e.id):sb.from('fin_expenses').insert({...row,period_id:S.period.id});
+    const {error}=await q;if(error)return fail(error);
+    S.lastCat=cat;closeSheet();toast(edit?'Gasto actualizado':'Gasto guardado');refresh()}}
+
+/* ---------- sheets: income ---------- */
+function sheetIncome(i){
+  i=i||{};const edit=!!i.id;
+  openSheet(edit?'Editar ingreso':'Nuevo ingreso',`
+  <form id="incForm">
+    <label class="f">Monto<input class="amount" id="iAmt" inputmode="decimal" autocomplete="off" value="${i.amount??''}" required></label>
+    <label class="f">Nota<input id="iNote" maxlength="100" placeholder="Salario" value="${esc(i.note||'')}"></label>
+    <label class="f">Fecha<input id="iDay" type="date" value="${i.day||defaultDay()}" required></label>
+    <div id="iErr" class="err" role="alert"></div>
+    <div class="actions">${edit?`<button class="btn danger" type="button" id="iDel">Borrar</button>`:''}<button class="btn" type="submit">Guardar ingreso</button></div>
+  </form>`);
+  if(edit){let armed=false;$('#iDel').onclick=async ev=>{
+    if(!armed){armed=true;ev.target.textContent='Toca para confirmar';return}
+    const {error}=await sb.from('fin_income').delete().eq('id',i.id);
+    if(error)return fail(error);closeSheet();toast('Ingreso borrado');refresh()}}
+  $('#incForm').onsubmit=async ev=>{
+    ev.preventDefault();const amount=num($('#iAmt').value);
+    if(!(amount>0)){$('#iErr').textContent='Escribe un monto mayor a cero.';return}
+    const row={amount:r2(amount),note:$('#iNote').value.trim()||null,day:$('#iDay').value};
+    const q=edit?sb.from('fin_income').update(row).eq('id',i.id):sb.from('fin_income').insert({...row,period_id:S.period.id});
+    const {error}=await q;if(error)return fail(error);closeSheet();toast('Ingreso guardado');refresh()}}
+
+/* ---------- sheets: period ---------- */
+function sheetPeriod(p){
+  const edit=!!p;
+  const last=S.periods[0];
+  const start=p?p.start_date:(last?addDays(last.end_date,1):today());
+  const end=p?p.end_date:addDays(start,14);
+  const half=p?p.half:(parse(start).getDate()<=15?1:2);
+  openSheet(edit?'Editar quincena':'Nueva quincena',`
+  <form id="perForm">
+    <div class="two"><label class="f">Desde<input id="pS" type="date" value="${start}" required></label>
+    <label class="f">Hasta<input id="pE" type="date" value="${end}" required></label></div>
+    <label class="f">Número de quincena<select id="pH"><option value="1" ${half===1?'selected':''}>1.ª (empieza entre el 1 y el 15)</option><option value="2" ${half===2?'selected':''}>2.ª (empieza después del 15)</option></select></label>
+    ${edit?'':`<label class="f">Ingreso de esta quincena (opcional)<input id="pI" inputmode="decimal" placeholder="0"></label>`}
+    <div id="pErr" class="err" role="alert"></div>
+    <button class="btn block" type="submit">${edit?'Guardar fechas':'Crear quincena'}</button>
+  </form>`);
+  $('#perForm').onsubmit=async ev=>{
+    ev.preventDefault();
+    const s=$('#pS').value,e=$('#pE').value,h=+$('#pH').value;
+    if(e<s){$('#pErr').textContent='La fecha final debe ser igual o posterior a la inicial.';return}
+    if(edit){const {error}=await sb.from('fin_periods').update({start_date:s,end_date:e,half:h}).eq('id',p.id);
+      if(error)return fail(error);
+      await loadBase();S.period=S.periods.find(x=>x.id===p.id);closeSheet();toast('Quincena actualizada');return refresh()}
+    const {data,error}=await sb.from('fin_periods').insert({start_date:s,end_date:e,half:h}).select().single();
+    if(error)return fail(error.code==='23505'?{message:'ya existe una quincena que empieza ese día'}:error);
+    const inc=num($('#pI').value);
+    if(inc>0){const r=await sb.from('fin_income').insert({period_id:data.id,day:s,amount:r2(inc),note:'Salario'});if(r.error)fail(r.error)}
+    await loadBase();S.period=S.periods.find(x=>x.id===data.id);S.tab='resumen';closeSheet();toast('Quincena creada');refresh()}}
+
+/* ---------- sheets: category ---------- */
+function sheetCat(id){
+  const c=id?catById(id):null;const edit=!!c;
+  openSheet(edit?'Editar categoría':'Nueva categoría',`
+  <form id="catForm">
+    <label class="f">Nombre<input id="cN" maxlength="40" value="${esc(c?.name||'')}" required></label>
+    <label class="f">Presupuesto mensual<input id="cB" inputmode="decimal" value="${c?c.monthly_budget:0}"></label>
+    <label class="f">Cuándo se paga<select id="cS">${Object.entries(SCHED).map(([k,v])=>`<option value="${k}" ${(c?.schedule||'split')===k?'selected':''}>${v}</option>`).join('')}</select></label>
+    <label class="f">Tipo<select id="cK">${Object.entries(KIND).map(([k,v])=>`<option value="${k}" ${(c?.kind||'variable')===k?'selected':''}>${v}</option>`).join('')}</select></label>
+    <p class="note" style="margin:-6px 0 14px">Las categorías fijas aparecen en “Por pagar” hasta que registres su pago.</p>
+    <label class="f row"><input id="cA" type="checkbox" ${(c?c.active:true)?'checked':''}>Categoría activa</label>
+    <div id="cErr" class="err" role="alert"></div>
+    <div class="actions">${edit?`<button class="btn danger" type="button" id="cDel">Borrar</button>`:''}<button class="btn" type="submit">Guardar</button></div>
+  </form>`);
+  if(edit){let armed=false;$('#cDel').onclick=async ev=>{
+    if(!armed){armed=true;ev.target.textContent='Toca para confirmar';return}
+    const {error}=await sb.from('fin_categories').delete().eq('id',c.id);
+    if(error){$('#cErr').textContent=error.code==='23503'?'Esta categoría tiene gastos. Desmárcala como activa para ocultarla.':error.message;ev.target.textContent='Borrar';armed=false;return}
+    closeSheet();toast('Categoría borrada');await loadBase();render()}}
+  $('#catForm').onsubmit=async ev=>{
+    ev.preventDefault();
+    const b=num($('#cB').value||0);if(!(b>=0)){$('#cErr').textContent='El presupuesto debe ser un número válido.';return}
+    const row={name:$('#cN').value.trim(),monthly_budget:r2(b),schedule:$('#cS').value,kind:$('#cK').value,active:$('#cA').checked};
+    if(!row.name){$('#cErr').textContent='Escribe un nombre.';return}
+    const q=edit?sb.from('fin_categories').update(row).eq('id',c.id):sb.from('fin_categories').insert({...row,sort:S.cats.length+1});
+    const {error}=await q;
+    if(error){$('#cErr').textContent=error.code==='23505'?'Ya tienes una categoría con ese nombre.':error.message;return}
+    closeSheet();toast('Categoría guardada');await loadBase();render()}}
+
+/* ---------- actions ---------- */
+document.addEventListener('click',async ev=>{
+  const t=ev.target.closest('[data-act],[data-tab]');if(!t)return;
+  if(t.dataset.tab){S.tab=t.dataset.tab;render();return}
+  const a=t.dataset.act,id=t.dataset.id;
+  if(a==='add-exp')sheetExpense();
+  else if(a==='pay')sheetExpense({category_id:t.dataset.cat,amount:t.dataset.amt});
+  else if(a==='edit-exp')sheetExpense(S.expenses.find(x=>x.id===id));
+  else if(a==='add-inc')sheetIncome();
+  else if(a==='edit-inc')sheetIncome(S.income.find(x=>x.id===id));
+  else if(a==='new-period')sheetPeriod();
+  else if(a==='edit-period')sheetPeriod(S.period);
+  else if(a==='edit-cat')sheetCat(id);
+  else if(a==='seed'){const {error}=await sb.rpc('fin_seed_defaults');if(error)return fail(error);await loadBase();render()}
+  else if(a==='signout'){await sb.auth.signOut()}
+});
+document.addEventListener('submit',async ev=>{
+  if(ev.target.id!=='goalForm')return;ev.preventDefault();
+  const g=num($('#goal').value);if(!(g>=0)){toast('Escribe una meta válida');return}
+  const {error}=await sb.from('fin_settings').upsert({user_id:S.user.id,free_goal:r2(g),updated_at:new Date().toISOString()});
+  if(error)return fail(error);S.settings={...(S.settings||{}),free_goal:r2(g)};toast('Meta guardada')});
+$('#prev').onclick=async()=>{const i=S.periods.findIndex(x=>x.id===S.period.id);if(i<S.periods.length-1){S.period=S.periods[i+1];await refresh()}};
+$('#next').onclick=async()=>{const i=S.periods.findIndex(x=>x.id===S.period.id);if(i>0){S.period=S.periods[i-1];await refresh()}};
+
+/* ---------- boot ---------- */
+sb.auth.getSession().then(({data})=>{data.session?start(data.session.user):showAuth()});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>

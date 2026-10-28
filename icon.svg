@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Quincena">
+  <rect width="512" height="512" rx="112" fill="#0E8F7E"/>
+  <rect x="96" y="226" width="176" height="60" rx="14" fill="#3B4BA8"/>
+  <rect x="278" y="226" width="64" height="60" rx="8" fill="#E3A72F"/>
+  <rect x="348" y="226" width="68" height="60" rx="14" fill="#F4FBF9"/>
+  <rect x="318" y="196" width="8" height="120" rx="4" fill="#0B3B34"/>
+</svg>
