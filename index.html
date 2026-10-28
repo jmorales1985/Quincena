@@ -35,9 +35,10 @@ h2{font-size:15px;color:var(--mut);font-weight:600;margin:28px 0 8px}
 .num{font-variant-numeric:tabular-nums}
 
 /* auth */
-#auth{padding:56px 0}
-#auth h1{font-size:34px;margin-bottom:6px}
-#auth p{margin:0 0 28px;color:var(--mut)}
+#auth,#lock{padding:56px 16px}
+#auth h1,#lock h1{font-size:34px;margin-bottom:6px}
+#auth p,#lock p{margin:0 0 28px;color:var(--mut)}
+#lock .btn+.btn{margin-top:12px}
 label.f{display:block;margin:0 0 14px;font-size:14px;color:var(--mut)}
 label.f input,label.f select{display:block;width:100%;margin-top:6px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--card);font-size:16px;color:var(--ink)}
 label.f.row{display:flex;align-items:center;gap:10px}
@@ -148,6 +149,14 @@ dialog#sheet::backdrop{background:rgba(5,15,12,.55)}
   </form>
 </section>
 
+<section id="lock" class="wrap hidden" aria-live="polite">
+  <h1>Quincena</h1>
+  <p>Está bloqueada. Confirma con Face ID o huella para ver tus finanzas.</p>
+  <button class="btn block" id="unlockBtn" type="button">Desbloquear</button>
+  <div id="lockErr" class="err" role="alert"></div>
+  <button class="btn ghost block" id="lockPass" type="button">Entrar con contraseña</button>
+</section>
+
 <div id="app" class="hidden">
   <header class="top"><div class="wrap">
     <div class="period">
@@ -223,8 +232,61 @@ function closeSheet(){if(dlg.open)dlg.close()}
 dlg.addEventListener('click',e=>{if(e.target===dlg)closeSheet()});
 $('#sheetClose').addEventListener('click',closeSheet);
 
+/* ---------- device lock (Face ID / fingerprint, local to this device) ---------- */
+const LOCK_KEY='q_lock',DISMISS_KEY='q_lock_dismiss';
+const lsGet=k=>{try{return localStorage.getItem(k)}catch(_){return null}};
+const lsSet=(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(_){}};
+const lockId=()=>lsGet(LOCK_KEY);
+const b64u={
+  enc:b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''),
+  dec:s=>{s=s.replace(/-/g,'+').replace(/_/g,'/');return Uint8Array.from(atob(s+'='.repeat((4-s.length%4)%4)),c=>c.charCodeAt(0))}};
+let bioOK=false,lockedUser=null,hiddenAt=0,unlocking=false;
+const bioReady=(window.PublicKeyCredential&&window.isSecureContext&&PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable)
+  ?PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(v=>{bioOK=!!v}).catch(()=>{}):Promise.resolve();
+
+async function enableLock(){
+  try{
+    const cred=await navigator.credentials.create({publicKey:{
+      challenge:crypto.getRandomValues(new Uint8Array(32)),
+      rp:{name:'Quincena'},
+      user:{id:crypto.getRandomValues(new Uint8Array(16)),name:S.user.email,displayName:S.user.email},
+      pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+      authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'discouraged'},
+      attestation:'none',timeout:60000}});
+    lsSet(LOCK_KEY,b64u.enc(cred.rawId));toast('Bloqueo activado');render();
+  }catch(e){if(e&&e.name==='NotAllowedError')toast('No se activó el bloqueo');else fail(e)}}
+async function verifyLock(){
+  const id=lockId();if(!id)return true;
+  try{
+    await navigator.credentials.get({publicKey:{
+      challenge:crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials:[{type:'public-key',id:b64u.dec(id)}],
+      userVerification:'required',timeout:60000}});
+    return true;
+  }catch(_){return false}}
+function showLock(){
+  $('#app').classList.add('hidden');$('#auth').classList.add('hidden');
+  $('#lock').classList.remove('hidden');$('#lockErr').textContent=''}
+async function tryUnlock(auto){
+  if(unlocking)return;unlocking=true;
+  const ok=await verifyLock();unlocking=false;
+  if(!ok){if(!auto)$('#lockErr').textContent='No se pudo verificar. Inténtalo de nuevo.';return}
+  $('#lock').classList.add('hidden');
+  if(S.user){$('#app').classList.remove('hidden');refresh()}else start(lockedUser)}
+function bioBanner(){
+  if(!bioOK||lockId()||lsGet(DISMISS_KEY))return '';
+  return `<div class="banner"><span>Abre Quincena con Face ID o huella.</span><span style="display:flex;gap:8px"><button class="btn small ghost" data-act="lock-dismiss">Ahora no</button><button class="btn small" data-act="lock-on">Activar</button></span></div>`}
+$('#unlockBtn').onclick=()=>tryUnlock(false);
+$('#lockPass').onclick=async()=>{lsSet(LOCK_KEY,null);await sb.auth.signOut()};
+// Re-lock when the app comes back after being in the background for more than a minute
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){hiddenAt=Date.now();return}
+  if(S.user&&lockId()&&hiddenAt&&Date.now()-hiddenAt>60000&&$('#lock').classList.contains('hidden')){
+    closeSheet();showLock();tryUnlock(true)}
+  hiddenAt=0});
+
 /* ---------- auth ---------- */
-function showAuth(){$('#app').classList.add('hidden');$('#auth').classList.remove('hidden');
+function showAuth(){$('#app').classList.add('hidden');$('#lock').classList.add('hidden');$('#auth').classList.remove('hidden');
   try{const m=localStorage.getItem('q_email');if(m)$('#email').value=m}catch(_){}}
 $('#loginForm').addEventListener('submit',async ev=>{
   ev.preventDefault();$('#authErr').textContent='';
@@ -254,7 +316,7 @@ async function loadPeriod(){
 async function start(user){
   S.user=user;$('#auth').classList.add('hidden');$('#app').classList.remove('hidden');
   try{
-    await loadBase();
+    await Promise.all([loadBase(),bioReady]);
     const t=today();
     S.period=S.periods.find(p=>p.start_date<=t&&t<=p.end_date)||S.periods[0]||null;
     await loadPeriod();render()
@@ -294,6 +356,7 @@ function rResumen(){
   const pend=k.rows.filter(r=>r.pend>0);
   const budgeted=k.rows.filter(r=>r.b>0||r.s>0);
   return `
+  ${bioBanner()}
   ${ended?`<div class="banner"><span>Esta quincena terminó el ${dshort(S.period.end_date)}.</span><button class="btn small" data-act="new-period">Crear siguiente</button></div>`:''}
   <section class="hero" aria-label="Reparto del ingreso">
     <div class="bar ${k.inc||k.spent?'':'empty'}" role="img" aria-label="${esc(alabel)}">${segs}${k.inc>goal?`<b class="goal" style="left:${goalPos.toFixed(2)}%"></b>`:''}</div>
@@ -348,6 +411,12 @@ function rAjustes(){
   <button class="btn" type="submit">Guardar meta</button></form>
   <h2>Quincena</h2>
   <div class="actions"><button class="btn ghost" data-act="edit-period" ${S.period?'':'disabled'}>Editar fechas</button><button class="btn ghost" data-act="new-period">Nueva quincena</button></div>
+  <h2>Seguridad</h2>
+  ${bioOK?(lockId()
+    ?`<p class="mut" style="margin:0 0 12px">El bloqueo con Face ID o huella está activo en este teléfono.</p><button class="btn ghost" data-act="lock-off">Desactivar bloqueo</button>`
+    :`<p class="mut" style="margin:0 0 12px">Pide Face ID o huella al abrir la app y al volver a ella.</p><button class="btn" data-act="lock-on">Activar bloqueo</button>`)
+    :`<p class="mut" style="margin:0 0 12px">Este navegador no ofrece Face ID ni huella para bloquear la app.</p>`}
+  <p class="note">Es un candado de este teléfono. No reemplaza tu contraseña al iniciar sesión.</p>
   <h2>Cuenta</h2><p class="mut" style="margin:0 0 12px">${esc(S.user?.email||'')}</p>
   <button class="btn danger" data-act="signout">Cerrar sesión</button>`}
 
@@ -478,6 +547,9 @@ document.addEventListener('click',async ev=>{
   else if(a==='edit-period')sheetPeriod(S.period);
   else if(a==='edit-cat')sheetCat(id);
   else if(a==='seed'){const {error}=await sb.rpc('fin_seed_defaults');if(error)return fail(error);await loadBase();render()}
+  else if(a==='lock-on')enableLock();
+  else if(a==='lock-off'){lsSet(LOCK_KEY,null);toast('Bloqueo desactivado');render()}
+  else if(a==='lock-dismiss'){lsSet(DISMISS_KEY,'1');render()}
   else if(a==='signout'){await sb.auth.signOut()}
 });
 document.addEventListener('submit',async ev=>{
@@ -489,7 +561,10 @@ $('#prev').onclick=async()=>{const i=S.periods.findIndex(x=>x.id===S.period.id);
 $('#next').onclick=async()=>{const i=S.periods.findIndex(x=>x.id===S.period.id);if(i>0){S.period=S.periods[i-1];await refresh()}};
 
 /* ---------- boot ---------- */
-sb.auth.getSession().then(({data})=>{data.session?start(data.session.user):showAuth()});
+sb.auth.getSession().then(({data})=>{
+  if(!data.session)return showAuth();
+  if(lockId()){lockedUser=data.session.user;showLock();tryUnlock(true)}
+  else start(data.session.user)});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
