@@ -155,7 +155,10 @@ button.crow{cursor:pointer}
 .chev{display:inline-block;margin-left:8px;color:var(--mut);font-style:normal}
 .chev.o{transform:rotate(90deg)}
 .cd{margin-top:10px;padding:4px 12px;border-radius:var(--radius);background:var(--inset)}
-.di{display:flex;justify-content:space-between;gap:12px;width:100%;border:0;background:none;padding:9px 0;font-size:14px;color:var(--mut);text-align:left}
+.di{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;border:0;background:none;padding:9px 0;font-size:14px;color:var(--mut);text-align:left}
+.dl small{display:block;font-size:12px;color:var(--mut);opacity:.8}
+.h2r{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:28px 0 12px}
+.h2r h2{margin:0}
 @media (prefers-reduced-motion:no-preference){
   .bar .seg{transition:flex-grow .35s ease}
 }
@@ -384,15 +387,16 @@ function rResumen(){
   const rows=k.rows.filter(r=>r.s>0).sort((a,b)=>b.s-a.s);
   const max=rows.length?rows[0].s:1;
   const pend=k.rows.filter(r=>r.pend>0);
+  const allOpen=rows.length>0&&rows.every(r=>opened.has(r.c.name));
   const cats=rows.map(r=>{
-    const items=(byCat[r.c.id]||[]).slice().sort((a,b)=>b.amount-a.amount);
-    const hasDet=items.some(x=>x.detail);
+    const items=(byCat[r.c.id]||[]).slice().sort((a,b)=>a.day<b.day?1:a.day>b.day?-1:(a.created_at<b.created_at?1:-1));
+    const hasDet=items.length>0;
     const isOpen=hasDet&&opened.has(r.c.name);
     const over=r.b>0&&r.s>r.b;
     const w=Math.max(2,Math.round(r.s/max*100));
     const inner=`<span class="ch"><span class="cn">${esc(r.c.name)}${hasDet?`<i class="chev ${isOpen?'o':''}" aria-hidden="true">›</i>`:''}</span><span class="ca ${over?'bad':''}">${fmtR(r.s)}</span></span><span class="cb"><i style="width:${w}%"></i></span>`;
     const head=hasDet?`<button class="crow" data-act="toggle-cat" data-name="${esc(r.c.name)}" aria-expanded="${isOpen}">${inner}</button>`:`<div class="crow">${inner}</div>`;
-    const det=isOpen?`<div class="cd">${items.map(x=>`<button class="di" data-act="edit-exp" data-id="${x.id}"><span>${esc(x.detail||'Sin detalle')}</span><span>${fmtR(+x.amount)}</span></button>`).join('')}</div>`:'';
+    const det=isOpen?`<div class="cd">${items.map(x=>`<button class="di" data-act="edit-exp" data-id="${x.id}"><span class="dl">${esc(x.detail||'Sin detalle')}<small>${dshort(x.day)}</small></span><span>${fmt(+x.amount)}</span></button>`).join('')}</div>`:'';
     return `<div class="cat2">${head}${det}</div>`}).join('');
   return `
   ${bioBanner()}
@@ -406,7 +410,7 @@ function rResumen(){
   <div class="disp ${k.free<0?'neg':'pos'}"><span>Disponible</span><b>${fmtR(k.free)}</b></div>
   <p class="note">${k.pending>0?`Al pagar lo que falta: <b class="${tone}">${fmtR(k.projected)}</b> · `:''}Meta ${fmtR(goal)}</p>
   ${k.inc===0?`<p class="note">Aún no hay ingreso en esta quincena. <button class="btn small ghost" data-act="add-inc">Agregar ingreso</button></p>`:''}
-  <h2>Gastos por categoría</h2>
+  <div class="h2r"><h2>Gastos por categoría</h2>${rows.length?`<button class="btn small ghost" data-act="toggle-all" data-open="${allOpen?'0':'1'}">${allOpen?'Contraer todo':'Expandir todo'}</button>`:''}</div>
   ${cats||'<p class="note">Aún no hay gastos en esta quincena. Registra el primero con el botón de abajo.</p>'}
   ${pend.length?`<h2>Por pagar en esta quincena</h2><div class="list">${pend.map(r=>`
     <button class="item" data-act="pay" data-cat="${r.c.id}" data-amt="${r.pend}">
@@ -580,6 +584,7 @@ document.addEventListener('click',async ev=>{
   else if(a==='toggle-cat'){const n=t.dataset.name,s=openSet();s.has(n)?s.delete(n):s.add(n);lsSet(OPEN_KEY,JSON.stringify([...s]));
     const y=window.scrollY;render();window.scrollTo(0,y);
     [...document.querySelectorAll('[data-act=toggle-cat]')].find(b=>b.dataset.name===n)?.focus({preventScroll:true})}
+  else if(a==='toggle-all'){const names=t.dataset.open==='1'?calc().rows.filter(r=>r.s>0).map(r=>r.c.name):[];lsSet(OPEN_KEY,JSON.stringify(names));const y=window.scrollY;render();window.scrollTo(0,y)}
   else if(a==='lock-on')enableLock();
   else if(a==='lock-off'){lsSet(LOCK_KEY,null);toast('Bloqueo desactivado');render()}
   else if(a==='lock-dismiss'){lsSet(DISMISS_KEY,'1');render()}
