@@ -130,6 +130,32 @@ dialog#sheet::backdrop{background:rgba(5,15,12,.55)}
 .actions .btn{flex:1}
 .lbl{font-size:14px;color:var(--mut)}
 #toast{position:fixed;left:50%;bottom:calc(132px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:20;max-width:90vw}
+:root{--bar:#2a78d6;--bad-bg:#FBE9E6;--good-bg:#DDF2EC;--inset:rgba(21,48,42,.06)}
+@media (prefers-color-scheme:dark){:root{--bar:#3987e5;--bad-bg:#3A1F1B;--good-bg:#12332C;--inset:rgba(230,239,236,.07)}}
+.rt{font-size:26px;margin:22px 0 2px}
+.rs{margin:0 0 16px;color:var(--mut)}
+.mc{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.m{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+.m span{display:block;font-size:14px;color:var(--mut)}
+.m b{display:block;font-size:24px;font-weight:700;margin-top:4px;letter-spacing:-.01em}
+.disp{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-top:12px;padding:16px;border-radius:var(--radius)}
+.disp.neg{background:var(--bad-bg);color:var(--bad)}
+.disp.pos{background:var(--good-bg);color:var(--free)}
+.disp span{font-size:15px}
+.disp b{font-size:26px;font-weight:700}
+.cat2{margin:0 0 18px}
+.crow{display:block;width:100%;padding:0;border:0;background:none;text-align:left;margin:0}
+button.crow{cursor:pointer}
+.ch{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.cn{font-size:17px}
+.ca{font-weight:700;font-size:17px;white-space:nowrap}
+.ca.bad{color:var(--bad)}
+.cb{display:block;height:8px;border-radius:4px;background:var(--line);margin-top:8px;overflow:hidden}
+.cb i{display:block;height:100%;background:var(--bar);border-radius:4px}
+.chev{display:inline-block;margin-left:8px;color:var(--mut);font-style:normal}
+.chev.o{transform:rotate(90deg)}
+.cd{margin-top:10px;padding:4px 12px;border-radius:var(--radius);background:var(--inset)}
+.di{display:flex;justify-content:space-between;gap:12px;width:100%;border:0;background:none;padding:9px 0;font-size:14px;color:var(--mut);text-align:left}
 @media (prefers-reduced-motion:no-preference){
   .bar .seg{transition:flex-grow .35s ease}
 }
@@ -340,48 +366,52 @@ function render(){
 
 function rEmptyPeriod(){return `<div class="empty-state"><p>Todavía no tienes una quincena. Crea la primera para empezar a registrar gastos.</p><button class="btn" data-act="new-period">Crear quincena</button></div>`}
 
+const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const fmtR=n=>(n<0?'-':'')+'₡'+Math.round(Math.abs(n)).toLocaleString('en-US');
+const OPEN_KEY='q_open';
+function openSet(){try{const v=JSON.parse(lsGet(OPEN_KEY)||'null');if(Array.isArray(v))return new Set(v)}catch(_){}return new Set(['Comida','Viajar / ocio','Hogar'])}
+
 function rResumen(){
   if(!S.period)return rEmptyPeriod();
   const k=calc(),goal=goalVal();
-  const total=Math.max(k.inc,k.spent+k.pending,1);
-  const freeSeg=Math.max(0,r2(k.inc-k.spent-k.pending));
-  const goalPos=Math.min(100,Math.max(0,(k.inc-goal)/total*100));
   const tone=k.projected>=goal?'good':(k.projected>=0?'warn':'bad');
   const isLatest=S.periods[0]&&S.periods[0].id===S.period.id;
   const ended=isLatest&&today()>S.period.end_date;
-  const segs=(k.spent>0?`<i class="seg spent" style="flex-grow:${k.spent}"></i>`:'')+
-    (k.pending>0?`<i class="seg pend" style="flex-grow:${k.pending}"></i>`:'')+
-    (freeSeg>0?`<i class="seg free" style="flex-grow:${freeSeg}"></i>`:'');
-  const alabel=`Gastado ${fmt(k.spent)}, por pagar ${fmt(k.pending)}, libre ${fmt(freeSeg)} de ${fmt(k.inc)} de ingreso`;
+  const end=parse(S.period.end_date),mn=MESES[end.getMonth()];
+  const sub=mn[0].toUpperCase()+mn.slice(1)+' '+end.getFullYear();
+  const opened=openSet();
+  const byCat={};S.expenses.forEach(e=>(byCat[e.category_id]=byCat[e.category_id]||[]).push(e));
+  const rows=k.rows.filter(r=>r.s>0).sort((a,b)=>b.s-a.s);
+  const max=rows.length?rows[0].s:1;
   const pend=k.rows.filter(r=>r.pend>0);
-  const budgeted=k.rows.filter(r=>r.b>0||r.s>0);
+  const cats=rows.map(r=>{
+    const items=(byCat[r.c.id]||[]).slice().sort((a,b)=>b.amount-a.amount);
+    const hasDet=items.some(x=>x.detail);
+    const isOpen=hasDet&&opened.has(r.c.name);
+    const over=r.b>0&&r.s>r.b;
+    const w=Math.max(2,Math.round(r.s/max*100));
+    const inner=`<span class="ch"><span class="cn">${esc(r.c.name)}${hasDet?`<i class="chev ${isOpen?'o':''}" aria-hidden="true">›</i>`:''}</span><span class="ca ${over?'bad':''}">${fmtR(r.s)}</span></span><span class="cb"><i style="width:${w}%"></i></span>`;
+    const head=hasDet?`<button class="crow" data-act="toggle-cat" data-name="${esc(r.c.name)}" aria-expanded="${isOpen}">${inner}</button>`:`<div class="crow">${inner}</div>`;
+    const det=isOpen?`<div class="cd">${items.map(x=>`<button class="di" data-act="edit-exp" data-id="${x.id}"><span>${esc(x.detail||'Sin detalle')}</span><span>${fmtR(+x.amount)}</span></button>`).join('')}</div>`:'';
+    return `<div class="cat2">${head}${det}</div>`}).join('');
   return `
   ${bioBanner()}
   ${ended?`<div class="banner"><span>Esta quincena terminó el ${dshort(S.period.end_date)}.</span><button class="btn small" data-act="new-period">Crear siguiente</button></div>`:''}
-  <section class="hero" aria-label="Reparto del ingreso">
-    <div class="bar ${k.inc||k.spent?'':'empty'}" role="img" aria-label="${esc(alabel)}">${segs}${k.inc>goal?`<b class="goal" style="left:${goalPos.toFixed(2)}%"></b>`:''}</div>
-    <div class="legend">
-      <span><i style="background:var(--spent)"></i>Gastado ${fmt(k.spent)}</span>
-      <span><i style="background:var(--pend)"></i>Por pagar ${fmt(k.pending)}</span>
-      <span><i style="background:var(--free)"></i>Libre ${fmt(freeSeg)}</span>
-    </div>
-  </section>
-  <dl class="facts">
-    <div><dt>Ingreso</dt><dd>${fmt(k.inc)}</dd></div>
-    <div><dt>Disponible hoy</dt><dd class="${k.free<0?'bad':''}">${fmt(k.free)}</dd></div>
-    <div class="big"><dt>Libre al pagar todo</dt><dd class="${tone}">${fmt(k.projected)}</dd></div>
-    <div><dt>Meta de libre</dt><dd>${fmt(goal)}</dd></div>
-  </dl>
-  <p class="note">${k.projected>=goal?'Vas por encima de tu meta.':`Te faltan ${fmt(r2(goal-k.projected))} para llegar a la meta.`}</p>
+  <h1 class="rt">Balance de la quincena</h1>
+  <p class="rs">${sub}</p>
+  <div class="mc">
+    <div class="m"><span>Ingreso</span><b>${fmtR(k.inc)}</b></div>
+    <div class="m"><span>Gastos</span><b>${fmtR(k.spent)}</b></div>
+  </div>
+  <div class="disp ${k.free<0?'neg':'pos'}"><span>Disponible</span><b>${fmtR(k.free)}</b></div>
+  <p class="note">${k.pending>0?`Al pagar lo que falta: <b class="${tone}">${fmtR(k.projected)}</b> · `:''}Meta ${fmtR(goal)}</p>
   ${k.inc===0?`<p class="note">Aún no hay ingreso en esta quincena. <button class="btn small ghost" data-act="add-inc">Agregar ingreso</button></p>`:''}
+  <h2>Gastos por categoría</h2>
+  ${cats||'<p class="note">Aún no hay gastos en esta quincena. Registra el primero con el botón de abajo.</p>'}
   ${pend.length?`<h2>Por pagar en esta quincena</h2><div class="list">${pend.map(r=>`
     <button class="item" data-act="pay" data-cat="${r.c.id}" data-amt="${r.pend}">
       <span class="l"><b>${esc(r.c.name)}</b><span>Toca para registrar el pago</span></span>
-      <span class="r">${fmt(r.pend)}</span></button>`).join('')}</div>`:''}
-  ${budgeted.length?`<h2>Presupuesto de la quincena</h2><div class="list">${budgeted.map(r=>{
-    const pct=r.b>0?Math.min(100,r.s/r.b*100):(r.s>0?100:0);const over=r.s>r.b;
-    return `<div class="cat"><div class="h"><b>${esc(r.c.name)}</b><span class="${over?'bad':''}">${fmt(r.s)}${r.b>0?` <span class="mut">/ ${fmt(r.b)}</span>`:' <span class="mut">sin presupuesto</span>'}</span></div>
-    <div class="t"><i class="${over?'over':''}" style="width:${pct.toFixed(1)}%"></i></div></div>`}).join('')}</div>`:''}`
+      <span class="r">${fmtR(r.pend)}</span></button>`).join('')}</div>`:''}`
 }
 
 function rMov(){
@@ -547,6 +577,9 @@ document.addEventListener('click',async ev=>{
   else if(a==='edit-period')sheetPeriod(S.period);
   else if(a==='edit-cat')sheetCat(id);
   else if(a==='seed'){const {error}=await sb.rpc('fin_seed_defaults');if(error)return fail(error);await loadBase();render()}
+  else if(a==='toggle-cat'){const n=t.dataset.name,s=openSet();s.has(n)?s.delete(n):s.add(n);lsSet(OPEN_KEY,JSON.stringify([...s]));
+    const y=window.scrollY;render();window.scrollTo(0,y);
+    [...document.querySelectorAll('[data-act=toggle-cat]')].find(b=>b.dataset.name===n)?.focus({preventScroll:true})}
   else if(a==='lock-on')enableLock();
   else if(a==='lock-off'){lsSet(LOCK_KEY,null);toast('Bloqueo desactivado');render()}
   else if(a==='lock-dismiss'){lsSet(DISMISS_KEY,'1');render()}
