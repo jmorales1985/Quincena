@@ -254,6 +254,28 @@ function calc(){
 function daysLeft(){const t=today(),p=S.period;if(!p||t<p.start_date||t>p.end_date)return null;return Math.round((parse(p.end_date)-parse(t))/86400000)}
 function defaultDay(){const t=today(),p=S.period;if(!p)return t;return t<p.start_date?p.start_date:(t>p.end_date?p.end_date:t)}
 
+/* ---------- next quincena ---------- */
+const plabel=p=>dshort(p.start_date)+' – '+dshort(p.end_date);
+function nextOf(p){const i=S.periods.findIndex(x=>x.id===p.id);return i>0?S.periods[i-1]:null}
+function nextDefaults(p){const start=addDays(p.end_date,1);return {start_date:start,end_date:addDays(start,14),half:parse(start).getDate()<=15?1:2}}
+// Returns the quincena that follows p, creating it with the default dates when it does not exist yet
+async function ensureNext(p){
+  const ex=nextOf(p);if(ex)return ex;
+  const d=nextDefaults(p);
+  const {data,error}=await sb.from('fin_periods').insert(d).select().single();
+  if(error){
+    if(error.code==='23505'){await loadBase();const f=S.periods.find(x=>x.start_date===d.start_date);if(f)return f}
+    throw error}
+  await loadBase();return S.periods.find(x=>x.id===data.id)}
+function periodPickHtml(){const d=nextOf(S.period)||nextDefaults(S.period);
+  return `<div class="lbl">Quincena</div><div class="chips" role="radiogroup" aria-label="Quincena"><label class="chip"><input type="radio" name="per" value="cur" checked><span>Esta · ${plabel(S.period)}</span></label><label class="chip"><input type="radio" name="per" value="next"><span>Siguiente · ${plabel(d)}</span></label></div>`}
+function wirePeriodPick(dayId){const d=nextOf(S.period)||nextDefaults(S.period);
+  document.querySelectorAll('input[name=per]').forEach(r=>{r.onchange=()=>{$(dayId).value=r.value==='next'?d.start_date:defaultDay()}})}
+async function targetPeriod(){
+  const pick=(document.querySelector('input[name=per]:checked')||{}).value;
+  if(pick==='next'){const np=await ensureNext(S.period);return {id:np.id,next:true}}
+  return {id:S.period.id,next:false}}
+
 /* ---------- sheet ---------- */
 const dlg=$('#sheet');
 function openSheet(title,html){$('#sheetTitle').textContent=title;$('#sheetBody').innerHTML=html;if(!dlg.open)dlg.showModal()}
@@ -357,10 +379,10 @@ function render(){
   const p=S.period;
   $('#pLabel').textContent=p?dshort(p.start_date)+' – '+dshort(p.end_date):'Sin quincena';
   const dl=daysLeft();
-  $('#pSub').textContent=p?('Quincena '+p.half+(dl===null?'':(dl===0?' · termina hoy':' · quedan '+dl+' días'))):'';
+  $('#pSub').textContent=p?('Quincena '+p.half+(dl===null?'':(dl===0?' · termina hoy':(dl===1?' · queda 1 día':' · quedan '+dl+' días')))):'';
   const i=S.periods.findIndex(x=>p&&x.id===p.id);
   $('#prev').disabled=!p||i>=S.periods.length-1;
-  $('#next').disabled=!p||i<=0;
+  const nb=$('#next');nb.textContent=i===0?'+':'›';nb.setAttribute('aria-label',i===0?'Crear la quincena siguiente':'Quincena siguiente');nb.disabled=!p;
   document.querySelectorAll('nav.tabs button').forEach(b=>{if(b.dataset.tab===S.tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
   $('#fab').classList.toggle('hidden',!p||S.tab==='ajustes'||S.tab==='cats');
   const v=$('#view');
@@ -468,11 +490,12 @@ function sheetExpense(e){
     <div class="chips" role="radiogroup" aria-label="Categoría">${cats.map(c=>`<label class="chip"><input type="radio" name="cat" value="${c.id}" ${c.id===sel?'checked':''}><span>${esc(c.name)}</span></label>`).join('')}</div>
     <label class="f">Detalle (opcional)<input id="eDet" list="dl" maxlength="100" autocomplete="off" value="${esc(e.detail||'')}"></label>
     <datalist id="dl">${details.map(d=>`<option value="${esc(d)}">`).join('')}</datalist>
+    ${edit?'':periodPickHtml()}
     <label class="f">Fecha<input id="eDay" type="date" value="${e.day||defaultDay()}" required></label>
     <div id="eErr" class="err" role="alert"></div>
     <div class="actions">${edit?`<button class="btn danger" type="button" id="eDel">Borrar</button>`:''}<button class="btn" type="submit">${edit?'Guardar cambios':'Guardar gasto'}</button></div>
   </form>`);
-  if(!edit)setTimeout(()=>$('#eAmt')?.focus(),60);
+  if(!edit){wirePeriodPick('#eDay');setTimeout(()=>$('#eAmt')?.focus(),60)}
   if(edit){let armed=false;$('#eDel').onclick=async ev=>{
     if(!armed){armed=true;ev.target.textContent='Toca para confirmar';return}
     const {error}=await sb.from('fin_expenses').delete().eq('id',e.id);
@@ -483,9 +506,12 @@ function sheetExpense(e){
     if(!(amount>0)){$('#eErr').textContent='Escribe un monto mayor a cero.';return}
     if(!cat){$('#eErr').textContent='Elige una categoría.';return}
     const row={category_id:cat,day,detail:$('#eDet').value.trim(),amount:r2(amount)};
-    const q=edit?sb.from('fin_expenses').update(row).eq('id',e.id):sb.from('fin_expenses').insert({...row,period_id:S.period.id});
-    const {error}=await q;if(error)return fail(error);
-    S.lastCat=cat;closeSheet();toast(edit?'Gasto actualizado':'Gasto guardado');refresh()}}
+    const btn=ev.submitter;if(btn)btn.disabled=true;
+    let target={id:S.period.id,next:false};
+    if(!edit){try{target=await targetPeriod()}catch(err){if(btn)btn.disabled=false;return fail(err)}}
+    const q=edit?sb.from('fin_expenses').update(row).eq('id',e.id):sb.from('fin_expenses').insert({...row,period_id:target.id});
+    const {error}=await q;if(error){if(btn)btn.disabled=false;return fail(error)}
+    S.lastCat=cat;closeSheet();toast(edit?'Gasto actualizado':(target.next?'Gasto guardado en la quincena siguiente':'Gasto guardado'));refresh()}}
 
 /* ---------- sheets: income ---------- */
 function sheetIncome(i){
@@ -494,10 +520,12 @@ function sheetIncome(i){
   <form id="incForm">
     <label class="f">Monto<input class="amount" id="iAmt" inputmode="decimal" autocomplete="off" value="${i.amount??''}" required></label>
     <label class="f">Nota<input id="iNote" maxlength="100" placeholder="Salario" value="${esc(i.note||'')}"></label>
+    ${edit?'':periodPickHtml()}
     <label class="f">Fecha<input id="iDay" type="date" value="${i.day||defaultDay()}" required></label>
     <div id="iErr" class="err" role="alert"></div>
     <div class="actions">${edit?`<button class="btn danger" type="button" id="iDel">Borrar</button>`:''}<button class="btn" type="submit">Guardar ingreso</button></div>
   </form>`);
+  if(!edit)wirePeriodPick('#iDay');
   if(edit){let armed=false;$('#iDel').onclick=async ev=>{
     if(!armed){armed=true;ev.target.textContent='Toca para confirmar';return}
     const {error}=await sb.from('fin_income').delete().eq('id',i.id);
@@ -506,8 +534,12 @@ function sheetIncome(i){
     ev.preventDefault();const amount=num($('#iAmt').value);
     if(!(amount>0)){$('#iErr').textContent='Escribe un monto mayor a cero.';return}
     const row={amount:r2(amount),note:$('#iNote').value.trim()||null,day:$('#iDay').value};
-    const q=edit?sb.from('fin_income').update(row).eq('id',i.id):sb.from('fin_income').insert({...row,period_id:S.period.id});
-    const {error}=await q;if(error)return fail(error);closeSheet();toast('Ingreso guardado');refresh()}}
+    const btn=ev.submitter;if(btn)btn.disabled=true;
+    let target={id:S.period.id,next:false};
+    if(!edit){try{target=await targetPeriod()}catch(err){if(btn)btn.disabled=false;return fail(err)}}
+    const q=edit?sb.from('fin_income').update(row).eq('id',i.id):sb.from('fin_income').insert({...row,period_id:target.id});
+    const {error}=await q;if(error){if(btn)btn.disabled=false;return fail(error)}
+    closeSheet();toast(target.next?'Ingreso guardado en la quincena siguiente':'Ingreso guardado');refresh()}}
 
 /* ---------- sheets: period ---------- */
 function sheetPeriod(p){
@@ -596,7 +628,7 @@ document.addEventListener('submit',async ev=>{
   const {error}=await sb.from('fin_settings').upsert({user_id:S.user.id,free_goal:r2(g),updated_at:new Date().toISOString()});
   if(error)return fail(error);S.settings={...(S.settings||{}),free_goal:r2(g)};toast('Meta guardada')});
 $('#prev').onclick=async()=>{const i=S.periods.findIndex(x=>x.id===S.period.id);if(i<S.periods.length-1){S.period=S.periods[i+1];await refresh()}};
-$('#next').onclick=async()=>{const i=S.periods.findIndex(x=>x.id===S.period.id);if(i>0){S.period=S.periods[i-1];await refresh()}};
+$('#next').onclick=async()=>{const i=S.periods.findIndex(x=>x.id===S.period.id);if(i>0){S.period=S.periods[i-1];await refresh()}else sheetPeriod()};
 
 /* ---------- boot ---------- */
 sb.auth.getSession().then(({data})=>{
